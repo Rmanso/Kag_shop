@@ -75,7 +75,11 @@ dfPrev$P2D[is.na(dfPrev$P2D)] <- -9999
 dflist <- split(dfPrev,f = dfPrev$Store)
 
 #Training the model ( randomForest)
-doMC(4)
-terribruForest <- foreach(i:1115, .combine = combine) %dopar% {
-	rf <- randomForest(Sales ~ .,data = dflist[[i]], do.trace = T, ntree = 200)
+#doMC(4)
+#terribruForest <- foreach(i:1115, .combine = combine) %dopar% {
+#	rf <- randomForest(Sales ~ .,data = dflist[[i]], do.trace = T, ntree = 200)
+#}
+daForest <- foreach(i=1:1115, .combine = combine) %do% {
+  cat("RF : ",i)
+  rf <- randomForest(Sales ~ .,data = dflist[[i]], ntree = 180)
 }
