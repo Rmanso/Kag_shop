@@ -57,6 +57,8 @@ dfPrev$Date <- NULL
 dfPrev$IntTMP <- NULL
 dfPrev$DateM <- NULL
 dfPrev$DateMI <- NULL
+dfPrev$PromoInterval <- NULL
+dfPrev$COSD <- NULL
 
 #List of DFs / Store(factor)
 dflist <- split(dfPrev,f = dfPrev$Store)
