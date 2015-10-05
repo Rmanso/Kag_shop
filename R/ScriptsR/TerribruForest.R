@@ -66,6 +66,10 @@ dfPrev$COSD <- NULL
 dfPrev$Prom2D <- NULL
 
 dfPrev$Store <- as.numeric(dfPrev$Store)
+#NAs
+dfPrev$CompetitionDistance[is.na(dfPrev$CompetitionDistance)] <- -1
+dfPrev$CD[is.na(dfPrev$CD)] <- -9999
+dfPrev$P2D[is.na(dfPrev$P2D)] <- -9999
 
 #List of DFs / Store(factor)
 dflist <- split(dfPrev,f = dfPrev$Store)
