@@ -53,12 +53,19 @@ dfPrev$SchoolHoliday <- as.factor(dfPrev$SchoolHoliday)
 dfPrev$Open <- as.factor(dfPrev$Open)
 dfPrev$Promo <- as.factor(dfPrev$Promo)
 dfPrev$P2A <- as.factor(dfPrev$P2A)
+dfPrev$DayOfWeek <- as.factor(dfPrev$DayOfWeek)
+dfPrev$STA <- as.factor(dfPrev$STA)
+dfPrev$CD <- as.numeric(dfPrev$CD)
+dfPrev$P2D <- as.numeric(dfPrev$P2D)
 dfPrev$Date <- NULL
 dfPrev$IntTMP <- NULL
 dfPrev$DateM <- NULL
 dfPrev$DateMI <- NULL
 dfPrev$PromoInterval <- NULL
 dfPrev$COSD <- NULL
+dfPrev$Prom2D <- NULL
+
+dfPrev$Store <- as.numeric(dfPrev$Store)
 
 #List of DFs / Store(factor)
 dflist <- split(dfPrev,f = dfPrev$Store)
