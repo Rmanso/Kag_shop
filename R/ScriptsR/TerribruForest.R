@@ -1,156 +1,112 @@
 library(doParallel)
 library(randomForest)
 library(foreach)
+library(dplyr)
 
 # Set working directory
-#setwd("C:/Users/usuario/Desktop/Formacion/Kaggle/Rossmann")#
+setwd("D:/Kaggle/Rossmann/TryOne")
 
-
-## Import data sets into DFs
-#train <- read.csv("C:/Users/usuario/Desktop/Formacion/Kaggle/Rossmann/train.csv")
-#store <- read.csv("C:/Users/usuario/Desktop/Formacion/Kaggle/Rossmann/store.csv")
-#test  <- read.csv("C:/Users/usuario/Desktop/Formacion/Kaggle/Rossmann/test.csv" )
-
+# Import data sets into DFs
 train <- read.csv("D:/Kaggle/Rossmann/TryOne/train.csv")
 store <- read.csv("D:/Kaggle/Rossmann/TryOne/store.csv")
 test  <- read.csv("D:/Kaggle/Rossmann/TryOne/test.csv" )
 
+#Merge DFs
+df<-inner_join(train,store,by="Store")
 
 #Transform store DF
-# Competition Open Since Date [COSD[( year + month)
-# Promo2Date[P2D] ( year + month )
-store$Prom2D <- as.Date(paste(store$Promo2SinceYear,store$Promo2SinceWeek,1),"%Y %U %u")
-store$COSD <- as.Date(paste(store$CompetitionOpenSinceYear,store$CompetitionOpenSinceMonth,1),"%Y %m %d")
-store$STA <- paste(store$StoreType,store$Assortment,sep="")
-store$CompetitionOpenSinceMonth <- NULL
-store$CompetitionOpenSinceYear <- NULL
-store$Promo2SinceWeek <- NULL
-store$Promo2SinceYear <- NULL
-store$Promo2 <- NULL
-store$StoreType <- NULL
-store$Assortment <- NULL
+df$Date<-as.POSIXct(df$Date,format="%Y-%m-%d")
+df<-mutate(df,Promo2D=round(difftime(Date,as.POSIXct((paste(1,Promo2SinceWeek,Promo2SinceYear)),format="%w %W %Y"),units="days")))
+df<-mutate(df,COSD=round(difftime(Date,as.POSIXct((paste(1,CompetitionOpenSinceMonth,CompetitionOpenSinceYear)),format="%d %m %Y"),units="days")))
+df<-mutate(df,DateM=month.abb[as.POSIXlt(Date,format="%Y-%m-%d")$mon + 1])
 
-#Transform train DF
-train$Customers <- NULL
+df$IntTMP[!is.na(df$PromoInterval)] <- ifelse(as.character(df$PromoInterval) == "Feb,May,Aug,Nov",1,ifelse(as.character(df$PromoInterval) == "Jan,Apr,Jul,Oct",2,ifelse(as.character(df$PromoInterval) == "Mar,Jun,Sept,Dec",2,0)))
+df$DateMI <- ifelse(is.element(df$DateM,c("Feb","May","Aug","Nov")),1,ifelse(is.element(df$DateM,c("Jan","Apr","Jul","Oct")),2,ifelse(is.element(df$DateM,c("Mar","Jun","Sept","Dec")),3,0)))
+df$P2A <- 0
+df$P2A[!is.na(df$Promo2D)] <- ifelse(df$DateMI[!is.na(df$Promo2D)] == df$IntTMP[!is.na(df$Promo2D)],1,0)
 
-#Join both modified DFs
-dfPrev <- merge(train,store,by.x ="Store")
 
-#Transform new DF
-#Competitor Date distance
-dfPrev$CD <- difftime(as.Date(dfPrev$Date,format = "%Y-%m-%d"),as.Date(dfPrev$COSD,format="%Y-%m%d"),units = "days")
-#Promo 2 Date distance
-dfPrev$P2D <- difftime(as.Date(dfPrev$Date,format = "%Y-%m-%d"),as.Date(dfPrev$Prom2D,format="%Y-%m%d"),units = "days")
+df<-df[,c("Store","DayOfWeek","Sales","Open","Promo","StateHoliday","SchoolHoliday","CompetitionDistance","COSD","P2A","Promo2D","DateM")]
 
-dfPrev$DateM <- month.abb[as.POSIXlt(dfPrev$Date,format="%Y-%m-%d")$mon + 1]
-dfPrev$P2A <- 0
+df$COSD<-as.numeric(df$COSD)
+df$COSD[is.na(df$COSD)] <- -999
+df$CompetitionDistance[is.na(df$CompetitionDistance)] <- 75860
 
-#Interval -> 3 categories
-dfPrev$IntTMP[!is.na(dfPrev$PromoInterval)] <- ifelse(as.character(dfPrev$PromoInterval) == "Feb,May,Aug,Nov",1,ifelse(as.character(dfPrev$PromoInterval) == "Jan,Apr,Jul,Oct",2,ifelse(as.character(dfPrev$PromoInterval) == "Mar,Jun,Sept,Dec",2,0)))
-#Date Month Interval
-dfPrev$DateMI <- ifelse(is.element(dfPrev$DateM,c("Feb","May","Aug","Nov")),1,ifelse(is.element(dfPrev$DateM,c("Jan","Apr","Jul","Oct")),2,ifelse(is.element(dfPrev$DateM,c("Mar","Jun","Sept","Dec")),3,0)))
-#Promo 2 Active
-dfPrev$P2A[dfPrev$IntTMP != 0] <- ifelse(dfPrev$DateMI[dfPrev$IntTMP != 0] == dfPrev$IntTMP[dfPrev$IntTMP != 0],1,0)
+df$Sales<-as.numeric(df$Sales)
+df$P2A <- factor(df$P2A)
+df$StateHoliday <- factor(df$StateHoliday)
+df$Open <- factor(df$Open)
+df$Promo <- factor(df$Promo)
+df$DayOfWeek <- factor(df$DayOfWeek)
+df$DateM<- factor(df$DateM,levels=c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"))
+df$Promo2D<-as.numeric(df$Promo2D)
+df$Promo2D[is.na(df$Promo2D)] <- -888
+df$SchoolHoliday<-factor(df$SchoolHoliday)
 
-dfPrev$Store <- as.factor(dfPrev$Store)
-dfPrev$P2A <- as.factor(dfPrev$P2A)
-dfPrev$StateHoliday <- as.factor(dfPrev$StateHoliday)
-dfPrev$SchoolHoliday <- as.factor(dfPrev$SchoolHoliday)
-dfPrev$Open <- as.factor(dfPrev$Open)
-dfPrev$Promo <- as.factor(dfPrev$Promo)
-dfPrev$P2A <- as.factor(dfPrev$P2A)
-dfPrev$DayOfWeek <- as.factor(dfPrev$DayOfWeek)
-dfPrev$STA <- as.factor(dfPrev$STA)
-dfPrev$CD <- as.numeric(dfPrev$CD)
-dfPrev$P2D <- as.numeric(dfPrev$P2D)
-dfPrev$Date <- NULL
-dfPrev$IntTMP <- NULL
-dfPrev$DateM <- NULL
-dfPrev$DateMI <- NULL
-dfPrev$PromoInterval <- NULL
-dfPrev$COSD <- NULL
-dfPrev$Prom2D <- NULL
+df <- filter(df, Open == 1)
 
-dfPrev$Store <- as.numeric(dfPrev$Store)
-#NAs
-dfPrev$CompetitionDistance[is.na(dfPrev$CompetitionDistance)] <- -1
-dfPrev$CD[is.na(dfPrev$CD)] <- -900
-dfPrev$P2D[is.na(dfPrev$P2D)] <- -900
-dfPrev$STA<-factor(dfPrev$STA,levels=c("aa","ab","ac","ad","ba","bb","bc","bd","ca","cb","cc","cd","da","db","dc","dd"),ordered = F)
-dfPrev$Sales<-as.numeric(dfPrev$Sales)
 #List of DFs / Store(factor)
-dflist <- split(dfPrev,f = dfPrev$Store)
+dflist <- split(df,f = df$Store)
+
+foreach(i=1:length(dflist)) %do% {
+  dflist[[i]]$Store<-factor(dflist[[i]]$Store)
+}
 
 #Training the model ( randomForest)
 cl <- makeCluster(4)
 registerDoParallel(cl)
+selva <- vector("list",length(dflist))
 
-daForest <- foreach(i=1:length(dflist), .combine=combine, .multicombine=TRUE, .packages='randomForest') %dopar% {
-  randomForest(dflist[[i]][,-3],dflist[[i]]$Sales , ntree=180) 
+for (i in 1:length(selva)){
+  selva[[i]]<- tuneRF(dflist[[i]][,-3],dflist[[i]]$Sales,stepFactor = 1.5,ntreeTry = 180,doBest = T)
 }
 
 #Adapt test DF
+dftest <- inner_join(test,store,by="Store")
 
-dftest <- merge(test,store,by.x ="Store")
+dftest$Date<-as.POSIXct(dftest$Date,format="%Y-%m-%d")
+dftest<-mutate(dftest,Promo2D=round(difftime(Date,as.POSIXct((paste(1,Promo2SinceWeek,Promo2SinceYear)),format="%w %W %Y"),units="days")))
+dftest<-mutate(dftest,COSD=round(difftime(Date,as.POSIXct((paste(1,CompetitionOpenSinceMonth,CompetitionOpenSinceYear)),format="%d %m %Y"),units="days")))
+dftest<-mutate(dftest,DateM=month.abb[as.POSIXlt(Date,format="%Y-%m-%d")$mon + 1])
 
-#Transform new DF
-#Competitor Date distance
-dftest$CD <- difftime(as.Date(dftest$Date,format = "%Y-%m-%d"),as.Date(dftest$COSD,format="%Y-%m%d"),units = "days")
-#Promo 2 Date distance
-dftest$P2D <- difftime(as.Date(dftest$Date,format = "%Y-%m-%d"),as.Date(dftest$Prom2D,format="%Y-%m%d"),units = "days")
-
-dftest$DateM <- month.abb[as.POSIXlt(dftest$Date,format="%Y-%m-%d")$mon + 1]
-dftest$P2A <- 0
-
-#Interval -> 3 categories
 dftest$IntTMP[!is.na(dftest$PromoInterval)] <- ifelse(as.character(dftest$PromoInterval) == "Feb,May,Aug,Nov",1,ifelse(as.character(dftest$PromoInterval) == "Jan,Apr,Jul,Oct",2,ifelse(as.character(dftest$PromoInterval) == "Mar,Jun,Sept,Dec",2,0)))
-#Date Month Interval
 dftest$DateMI <- ifelse(is.element(dftest$DateM,c("Feb","May","Aug","Nov")),1,ifelse(is.element(dftest$DateM,c("Jan","Apr","Jul","Oct")),2,ifelse(is.element(dftest$DateM,c("Mar","Jun","Sept","Dec")),3,0)))
-#Promo 2 Active
-dftest$P2A[dftest$IntTMP != 0] <- ifelse(dftest$DateMI[dftest$IntTMP != 0] == dftest$IntTMP[dftest$IntTMP != 0],1,0)
-
-dftest$Store <- as.factor(dftest$Store)
-dftest$P2A <- as.factor(dftest$P2A)
-dftest$StateHoliday <- as.factor(dftest$StateHoliday)
-dftest$SchoolHoliday <- as.factor(dftest$SchoolHoliday)
-dftest$Open <- as.factor(dftest$Open)
-dftest$Promo <- as.factor(dftest$Promo)
-dftest$P2A <- as.factor(dftest$P2A)
-dftest$DayOfWeek <- as.factor(dftest$DayOfWeek)
-dftest$STA <- as.factor(dftest$STA)
-dftest$CD <- as.numeric(dftest$CD)
-dftest$P2D <- as.numeric(dftest$P2D)
-dftest$Date <- NULL
-dftest$IntTMP <- NULL
-dftest$DateM <- NULL
-dftest$DateMI <- NULL
-dftest$PromoInterval <- NULL
-dftest$COSD <- NULL
-dftest$Prom2D <- NULL
-
-dftest$Store <- as.numeric(dftest$Store)
-
-dftest$Id <- NULL
+dftest$P2A <- 0
+dftest$P2A[!is.na(dftest$Promo2D)] <- ifelse(dftest$DateMI[!is.na(dftest$Promo2D)] == dftest$IntTMP[!is.na(dftest$Promo2D)],1,0)
 dftest$Sales <- 0
 
+dftest<-dftest[,c("Store","DayOfWeek","Sales","Open","Promo","StateHoliday","SchoolHoliday","CompetitionDistance","COSD","P2A","Promo2D","DateM")]
+
 #NAs
-dftest$CompetitionDistance[is.na(dftest$CompetitionDistance)] <- -1
-dftest$CD[is.na(dftest$CD)] <- -900
-dftest$P2D[is.na(dftest$P2D)] <- -900
+dftest$COSD<-as.numeric(dftest$COSD)
+dftest$COSD[is.na(dftest$COSD)] <- 0
 dftest$Open[is.na(dftest$Open)] <- 0
+dftest$CompetitionDistance[is.na(dftest$CompetitionDistance)] <- 75860
 
-#Extras
-dftest$StateHoliday<-factor(dftest$StateHoliday,levels=c("0","a","b","c"))
-dftest$DayOfWeek<-factor(dftest$DayOfWeek,levels=c("1","2","3","4","5","6","7"),ordered = F)
-dftest$STA<-factor(dftest$STA,levels=c("aa","ab","ac","ad","ba","bb","bc","bd","ca","cb","cc","cd","da","db","dc","dd"))
-
+dftest$Sales<-as.numeric(dftest$Sales)
+dftest$P2A <- factor(dftest$P2A)
+dftest$StateHoliday <- factor(dftest$StateHoliday,levels=c("0","a","b","c"))
+dftest$Open <- factor(dftest$Open)
+dftest$Promo <- factor(dftest$Promo)
+dftest$DayOfWeek <- factor(dftest$DayOfWeek)
+dftest$DateM<- factor(dftest$DateM,levels=c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"))
+dftest$Promo2D<-as.numeric(dftest$Promo2D)
+dftest$Promo2D[is.na(dftest$Promo2D)] <- 54
+dftest$SchoolHoliday<-factor(dftest$SchoolHoliday)
 
 #Create a list of predictions from adapted test DF
-Prediction <- predict(daForest,dftest)
+
+for (i in 1:nrow(dftest)){
+  op <- as.integer(dftest[i,]$Open)
+  if (op == 2){
+    n <- as.integer(dftest[i,]$Store)
+    dftest[i,]$Sales=predict(selva[[n]],dftest[i,])
+  }
+}
 
 
 #Create a submit DF
-submit <- data.frame(Id = test$Id, Sales = Prediction)
+submit <- data.frame(Id = test$Id, Sales = dftest$Sales)
 
 #Save into csv
-write.csv(submit, file = "RossmanTryOne.csv", row.names = FALSE)
+write.csv(submit, file = "RossmanTryFive.csv", row.names = FALSE)
