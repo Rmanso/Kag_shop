@@ -102,13 +102,11 @@ rfHex <- h2o.randomForest(x=features,
                           training_frame=trainHex)
 
 
-## Load test data into cluster from R
 testHex<-as.h2o(test)
 
-## Get predictions out; predicts in H2O, as.data.frame gets them into R
+
 predictions<-as.data.frame(h2o.predict(rfHex,testHex))
 
-## Return the predictions to the original scale of the Sales data
 pred <- expm1(predictions[,1])
 
 submission <- data.frame(Id=test$Id, Sales=pred)
